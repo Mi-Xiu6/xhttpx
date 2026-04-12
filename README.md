@@ -1,5 +1,5 @@
 一个新手安全开发者的试手作，如果那里有问题可以尽情说出来，我会虚心请教的。
-[Xhttpx - 批量域名存活探测工具.md](https://github.com/user-attachments/files/26655921/Xhttpx.-.md)
+
 # Xhttpx - 批量域名存活探测工具
 
 > 一款基于 Python 开发的多线程批量探测域名存活状态的工具，支持 txt、csv、xlsx 等多种格式的域名列表文件，自动尝试 HTTPS/HTTP 协议，快速识别存活域名并输出结果。
