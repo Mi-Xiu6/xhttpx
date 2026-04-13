@@ -2,6 +2,7 @@ import threading
 import csv
 import time
 import os
+import re
 
 import urllib3
 import requests
@@ -16,6 +17,7 @@ timeout = 5
 lock = threading.Lock()
 targets = []
 result_hosts = []
+error_hosts = []
 
 text = """\033[33m
 '##::::'##:'##::::'##:'########:'########:'########::'##::::'##:
@@ -43,11 +45,14 @@ headers = {
 txt_file = host
 csv_file = host
 xlsx_file = host
-result_file = "存活域名.txt"
+result_file1 = "存活域名.txt"
+result_file2 = "高级访问.txt"
 
 # 清空结果文件
-if os.path.exists(result_file):
-    open(result_file, 'w').close()
+if os.path.exists(result_file1):
+    open(result_file1, 'w').close()
+if os.path.exists(result_file2):
+    open(result_file2, 'w').close()
 
 # 根据文件扩展名选择读取方式
 file_ext = os.path.splitext(host)[1].lower()
@@ -91,7 +96,6 @@ elif file_ext in ['.xlsx', '.xls']:
     except Exception as e:
         print(f'[!] 读取xlsx文件失败: {e}')
 else:
-    # 默认按txt格式读取
     try:
         with open(host, 'r', encoding='utf-8') as f:
             for line in f:
@@ -110,46 +114,64 @@ print('[*] 开始探测...\n')
 start_time = time.time()
 threads = []
 
+def extract_title(text):
+    try:
+        title = re.findall(r'<title>(.*?)</title>', text, re.IGNORECASE)
+        return title[0].strip() if title else "无标题"
+    except Exception:
+        return "无标题"
+
 def scan(target_url):
     # 添加协议前缀
     if not target_url.startswith(('http://', 'https://')):
         target_url = 'https://' + target_url
-    
     try:
         response = requests.get(target_url, headers=headers, timeout=timeout, verify=False)
         response.encoding = 'utf-8'
+        title = extract_title(response.text)
         if response.status_code in [200, 301, 302]:
-            msg = f'[*]响应[{response.status_code}] -> {target_url} -> \033[32m存活\033[0m'
+            msg = f'[*]响应[{response.status_code}] -> 长度[{len(response.text)}] -> 标题[{title}] -> {target_url} -> \033[32m存活\033[0m'
             with lock:
                 result_hosts.append(target_url)
-                with open(result_file, 'a', encoding='utf-8') as f:
+                with open(result_file1, 'a', encoding='utf-8') as f:
                     f.write(f'{target_url}\n')
                 print(msg)
         else:
-            msg = f'[*]响应[{response.status_code}] -> {target_url} -> \033[31m死亡\033[0m'
+            msg = f'[*]响应[{response.status_code}] -> 长度[{len(response.text)}] -> 标题[{title}] -> {target_url} -> \033[31m死亡\033[0m'
             with lock:
                 print(msg)
-    except:
+    except Exception:
         # HTTPS失败则尝试HTTP
         if target_url.startswith('https://'):
             http_url = target_url.replace('https://', 'http://')
             try:
                 response = requests.get(http_url, headers=headers, timeout=timeout, verify=False)
                 response.encoding = 'utf-8'
+                title = extract_title(response.text)
                 if response.status_code in [200, 301, 302]:
-                    msg = f'[*]响应[{response.status_code}] -> {http_url} -> \033[32m存活\033[0m'
+                    msg = f'[**]响应[{response.status_code}] -> 长度[{len(response.text)}] -> 标题[{title}] -> {http_url} -> \033[32m存活\033[0m'
                     with lock:
                         result_hosts.append(http_url)
-                        with open(result_file, 'a', encoding='utf-8') as f:
+                        with open(result_file1, 'a', encoding='utf-8') as f:
                             f.write(f'{http_url}\n')
                         print(msg)
                     return
-            except:
+                else:
+                    msg = f'[**]响应[{response.status_code}] -> 长度[{len(response.text)}] -> 标题[{title}] -> {http_url} -> \033[31m死亡\033[0m'
+                    with lock:
+                        print(msg)
+                    return
+            except Exception:
                 pass
         
-        msg = f'[*]请求失败 -> {target_url} -> \033[31m死亡\033[0m'
+        # 请求失败时的处理
+        msg = f'[*]请求失败 -> {target_url} -> \033[33m隐私错误[需要手动高级连接]\033[0m'
         with lock:
+            error_hosts.append(target_url)
+            with open(result_file2, 'a', encoding='utf-8') as f:
+                f.write(f'{target_url}\n')
             print(msg)
+        return
 
 # 启动多线程探测
 for target in targets:
@@ -170,6 +192,7 @@ finish_time = end_time - start_time
 print(f'\n{"="*50}')
 print(f'[*] 探测完成！')
 print(f'[*] 存活域名数量: {len(result_hosts)} 个')
+print(f'[*] 隐私错误域名数量: {len(error_hosts)} 个')
 print(f'[*] 总耗时: {finish_time:.2f} 秒')
-print(f'[*] 结果已保存到: {result_file}')
+print(f'[*] 结果已保存到: {result_file1}, {result_file2}')
 print(f'{"="*50}')
